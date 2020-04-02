@@ -10,3 +10,5 @@ The [original paper](https://doi.org/10.1016/j.neucom.2010.10.011) (author-provi
 
 The [MATLAB code](http://gr.xjtu.edu.cn/c/document_library/get_file?folderId=495355&name=DLFE-8841.rar) 
 was written by [Deyu Meng](http://www.cs.cmu.edu/~deyum/Publications.htm). The Python code is an  adaptation by Andrew Lensen.
+
+The code is packaged as gbquality on [pypi](https://pypi.org/project/gbquality/) and so can be installed in the normal way with `pip install gbquality`
