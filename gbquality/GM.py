@@ -12,7 +12,7 @@ def global_judge(X, Y, k):
     Evaluating nonlinear dimensionality reduction based on its local
     and global quality assessments, Neurocomputing, 2011, 74(6): 941-948."
 
-    The code is written by Deyu Meng & adapated by Andrew Lensen
+    The code is written by Deyu Meng & adapted by Andrew Lensen
 
     :param X: Original data (dim1*num)
     :param Y: Embedded data (dim2*num): dim2 < dim1
