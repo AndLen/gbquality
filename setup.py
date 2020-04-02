@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='gbquality',
-    version='0.1',
+    version='0.11',
     author='Andrew Lensen',
     author_email='Andrew.Lensen@ecs.vuw.ac.nz',
     license='MIT',
@@ -14,7 +14,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url='https://github.com/AndLen/gbquality',
     packages=setuptools.find_packages(),
-    download_url='https://github.com/AndLen/gbquality/archive/v0.1.tar.gz',
+    download_url='https://github.com/AndLen/gbquality/archive/v0.11.tar.gz',
     keywords=['NLDR', 'manifold learning', 'global quality'],  # Keywords that define your package best
     install_requires=[
         'numpy',
@@ -24,7 +24,7 @@ setuptools.setup(
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
-        'Topic :: Software Development :: Build Tools',
+        'Topic :: Scientific/Engineering :: Artificial Intelligence',
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.4',
