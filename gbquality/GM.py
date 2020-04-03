@@ -1,9 +1,8 @@
 # GM.m
-from copy import deepcopy
 
 import numpy as np
+from numba import njit, numba
 from scipy.stats import spearmanr
-from sklearn.metrics import pairwise_distances
 
 
 def global_judge(X, Y, k):
@@ -31,13 +30,30 @@ def global_judge_x_precomputed(leaf_indices, x_dists, centre_index, Y):
     :param Y: Embedded data (dim*num)
     :return global quality in [0,1].
     """
-    pairwise_y = pairwise_distances(Y.T)
+    pairwise_y = euclidean_distance(Y.T)
     y_dists = pairwise_y[centre_index, leaf_indices]
 
     global_score = (1 + spearmanr(x_dists, y_dists)[0]) / 2
     return global_score
 
 
+@njit(fastmath=True)
+def euclidean_distance(X):
+    """
+    Just let numba make this efficient for us!
+    :param X: data (num*dim)
+    """
+    N = X.shape[0]
+    dists = np.zeros((N, N), np.float64)
+    for i in range(N):
+        for j in range(N):
+            dists[i][j] = np.linalg.norm(X[i] - X[j])
+    # just in case..
+    np.fill_diagonal(dists, 0.)
+    return dists
+
+
+@njit(fastmath=True)
 def compute_x_leaves(X, K):
     """
     All the heavy pre-processing on the source data. Only needs to be run once, so it's not particularly efficient!
@@ -46,16 +62,21 @@ def compute_x_leaves(X, K):
     :return: leaf_indices, leaf_dists, centre_index
     """
     # matlab's L2_distance converts feature-major to instance-major
-    pairwise_x = pairwise_distances(X.T)
+    pairwise_x = euclidean_distance(X.T)
     N = pairwise_x.shape[0]
-    INF = 1000 * np.max(np.max(pairwise_x)) * N  # effectively infinite distance
-    ind = np.argsort(pairwise_x, axis=1)[:, :K + 1]
+    INF = 1000 * np.amax(pairwise_x) * N  # effectively infinite distance
+    # ind = np.argsort(pairwise_x, axis=1)[:, :K + 1]
+    ind = np.empty((N, K + 1), dtype=numba.int_)
+    for i in range(N):
+        ind[i, :] = np.argsort(pairwise_x[i])[:K + 1]
     _D = np.full((N, N), INF)
     np.fill_diagonal(_D, 0.)
     # _D = np.zeros((N, N))
     for ii in range(N):
         # I think this is right for nx?
-        _D[ii, ind[ii]] = pairwise_x[ii, ind[ii]]
+        for val in ind[ii]:
+            _D[ii, val] = pairwise_x[ii, val]
+        # _D[ii, ind[ii]] = pairwise_x[ii, ind[ii]]
     pairwise_x = _D
     pairwise_x = np.minimum(pairwise_x, pairwise_x.T)
     # CHECK
@@ -73,16 +94,20 @@ def compute_x_leaves(X, K):
                 if pairwise_x[ii, jj] > pairwise_x[ii, k] + pairwise_x[k, jj]:
                     PP[ii][jj] = PP[ii][k][:- 1] + PP[k][jj]
         pairwise_x = np.minimum(pairwise_x,
-                                np.repeat(pairwise_x[:, k], N).reshape(N, N) + np.tile(pairwise_x[k, :], [N, 1]))
+                                np.repeat(pairwise_x[:, k], N).reshape(N, N) + np.repeat(pairwise_x[k, :], N).reshape(N,
+                                                                                                                      N).T)
     spt_dists_x = pairwise_x
-    a = np.max(pairwise_x, axis=0)
+    a = np.empty(N)
+    for i in range(N):
+        a[i] = np.max(pairwise_x[i])
+    # a = np.max(pairwise_x,axis=0)
     centre_index = int(np.argmin(a))
-    max_dist = max(pairwise_x[centre_index, :])
+    max_dist = np.max(pairwise_x[centre_index, :])
     indices = [x for x in range(N) if x != centre_index]
     candidate_leaves = []
     while len(indices) > 0:
         idx = indices[0]
-        idx_path = deepcopy(PP[centre_index][idx])
+        idx_path = list(PP[centre_index][idx])
         candidate_leaves.append(idx)
         idx_path.remove(centre_index)
 
@@ -112,5 +137,9 @@ def compute_x_leaves(X, K):
             k = k + 1
             potential_leaves.insert(k, temp_leaf2)
             final_leaf_indices.insert(k, temp_leaf)
-    leaf_dists = spt_dists_x[centre_index, final_leaf_indices]
+    leaf_dists = np.empty(len(final_leaf_indices))
+    i = 0
+    for j in final_leaf_indices:
+        leaf_dists[i] = spt_dists_x[centre_index, j]
+        i += 1
     return final_leaf_indices, leaf_dists, centre_index

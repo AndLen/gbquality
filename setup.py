@@ -19,7 +19,8 @@ setuptools.setup(
     install_requires=[
         'numpy',
         'scipy',
-        'scikit-learn'
+        'scikit-learn',
+        'numba >=0.47.0'
     ],
     classifiers=[
         'Development Status :: 4 - Beta',
