@@ -30,11 +30,36 @@ def global_judge_x_precomputed(leaf_indices, x_dists, centre_index, Y):
     :param Y: Embedded data (dim*num)
     :return global quality in [0,1].
     """
-    pairwise_y = euclidean_distance(Y.T)
-    y_dists = pairwise_y[centre_index, leaf_indices]
+
+    # we only need the relevant distances
+    y_dists = leaves_to_centre_euclidean(Y.T, centre_index, np.asarray(leaf_indices))
 
     global_score = (1 + spearmanr(x_dists, y_dists)[0]) / 2
     return global_score
+
+@njit(fastmath=True)
+def leaves_to_centre_euclidean(_Y, centre_index, leaf_indices):
+    y_dists = np.zeros(len(leaf_indices))
+    for i, leaf in enumerate(leaf_indices):
+        y_dists[i] = np.linalg.norm(_Y[centre_index] - _Y[leaf])
+    return y_dists
+
+
+@njit(fastmath=True)
+def euclidean_distance_2(X, Y):
+    """
+    Just let numba make this efficient for us!
+    :param X: data (num*dim)
+    :param Y: data2 (num*dim2)
+    """
+    X_N = X.shape[0]
+    Y_N = Y.shape[0]
+
+    dists = np.zeros((X_N, Y_N), np.float64)
+    for i in range(X_N):
+        for j in range(Y_N):
+            dists[i][j] = np.linalg.norm(X[i] - Y[j])
+    return dists
 
 
 @njit(fastmath=True)
