@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='gbquality',
-    version='0.30',
+    version='0.31',
     author='Andrew Lensen',
     author_email='Andrew.Lensen@ecs.vuw.ac.nz',
     license='MIT',
