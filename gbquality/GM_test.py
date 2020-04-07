@@ -5,22 +5,43 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.manifold import Isomap
 
-from gbquality.GM import compute_x_leaves, global_judge_x_precomputed
+from gbquality.GM import compute_x_leaves, global_judge_x_precomputed, brute_compute_minimum_K, euclidean_distance, \
+    compute_paths
+
+
+def generate_data():
+    # GENERATE SAMPLED DATA
+    # S-CURVE DATASET
+    angle = np.pi * (1.5 * np.random.rand(1, 600) - 1)
+    height = 5 * np.random.rand(1, 600)
+    X1 = np.vstack((np.cos(angle), height, np.sin(angle)))
+    angle = np.pi * (1.5 * np.random.rand(1, 100) - 1)
+    height = 5 * np.random.rand(1, 100)
+    X2 = np.vstack((-np.cos(angle), height, 2 - np.sin(angle)))
+    X = np.hstack((X1, X2))
+    return X
 
 
 class TestGM(unittest.TestCase):
+
+    def test_scurve_search_k(self):
+        X = generate_data()
+        print(X)
+
+        K, pairwise_X, PP = brute_compute_minimum_K(X)
+        print('Using a K of {}'.format(K))
+        leaf_indices, leaf_dists, centre_index = compute_x_leaves(X, K, pairwise_X, PP)
+
+        y_isomap = Isomap(n_neighbors=6).fit_transform(deepcopy(X.T)).T
+        y_pca = PCA(n_components=2).fit_transform(deepcopy(X.T)).T
+        g_isomap = global_judge_x_precomputed(leaf_indices, leaf_dists, centre_index, y_isomap)
+        g_pca = global_judge_x_precomputed(leaf_indices, leaf_dists, centre_index, y_pca)
+        print('Isomap:' + str(g_isomap))
+        print('PCA:' + str(g_pca))
+        self.assertLess(g_pca, g_isomap)
+
     def test_scurve(self):
-        # GENERATE SAMPLED DATA
-        # S-CURVE DATASET
-        angle = np.pi * (1.5 * np.random.rand(1, 600) - 1)
-        height = 5 * np.random.rand(1, 600)
-        X1 = np.vstack((np.cos(angle), height, np.sin(angle)))
-
-        angle = np.pi * (1.5 * np.random.rand(1, 100) - 1)
-        height = 5 * np.random.rand(1, 100)
-        X2 = np.vstack((-np.cos(angle), height, 2 - np.sin(angle)))
-
-        X = np.hstack((X1, X2))
+        X = generate_data()
 
         print(X)
         leaf_indices, leaf_dists, centre_index = compute_x_leaves(X, 6)
@@ -31,7 +52,8 @@ class TestGM(unittest.TestCase):
         g_pca = global_judge_x_precomputed(leaf_indices, leaf_dists, centre_index, y_pca)
         print('Isomap:' + str(g_isomap))
         print('PCA:' + str(g_pca))
-        self.assertLess(g_pca, g_isomap)
+        self.assertTrue(np.isfinite(g_pca))
+        self.assertTrue(np.isfinite(g_isomap))
 
     def test_random_data(self):
         X = np.array([
@@ -440,7 +462,9 @@ class TestGM(unittest.TestCase):
         Y_isomap = Isomap(n_neighbors=6).fit_transform(deepcopy(X.T)).T
         Y_pca = PCA(n_components=2).fit_transform(deepcopy(X.T)).T
 
-        leaf_indices, leaf_dists, centre_index = compute_x_leaves(X, 6)
+        pairwise_x = euclidean_distance(X.T)
+        PP, new_pairwise_x = compute_paths(pairwise_x, 6)
+        leaf_indices, leaf_dists, centre_index = compute_x_leaves(X, 6,new_pairwise_x,PP)
 
         G_isomap = global_judge_x_precomputed(leaf_indices, leaf_dists, centre_index, Y_isomap)
         G_pca = global_judge_x_precomputed(leaf_indices, leaf_dists, centre_index, Y_pca)
