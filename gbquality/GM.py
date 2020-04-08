@@ -47,7 +47,6 @@ def leaves_to_centre_euclidean(Y_t, centre_index, leaf_indices):
     return y_dists
 
 
-
 @njit(fastmath=True)
 def euclidean_distance(X):
     """
@@ -89,6 +88,55 @@ def brute_compute_minimum_K(X, max_k=None):
             print('{} of {} ({:2f}%) not connected for K of {}.'.format(missing, size, missing * 100 / size, K))
     raise ValueError('No valid K found for given X')
 
+
+def do_decreasing_search(max_K, pairwise_euclidean_x):
+    print('Decreasing search from {} down'.format(max_K))
+    K = max_K - 1
+    while K > 0:  # just in case, should early return
+        paths, pairwise_geodesic_x = compute_paths(pairwise_euclidean_x, K)
+        _isinf = np.isinf(pairwise_geodesic_x)
+        if not _isinf.any():
+            # this one is still good
+            print('K of {} is still good'.format(K))
+            K -= 1
+        else:
+            # the one just before was best, since this is the first one which failed.
+            print('K of {} is mimimal.'.format(K+1))
+            return K + 1, pairwise_geodesic_x, paths
+
+    #eek!
+    return compute_paths(pairwise_euclidean_x, max_K)
+
+
+def binary_search_minimum_K(X, min_k=1, max_k=None):
+    pairwise_euclidean_x = euclidean_distance(X.T)
+
+    if not max_k:
+        max_k = int(np.ceil(np.sqrt(pairwise_euclidean_x.shape[0])))
+
+    paths, pairwise_geodesic_x = None, None
+    if min_k == max_k:
+        paths, pairwise_geodesic_x = compute_paths(pairwise_euclidean_x, min_k)
+
+    while min_k < max_k:
+        #bias the search towards smaller?
+        K = (min_k + max_k) // 2
+        print('Trying K of {}'.format(K))
+        paths, pairwise_geodesic_x = compute_paths(pairwise_euclidean_x, K)
+        _isinf = np.isinf(pairwise_geodesic_x)
+        if not _isinf.any():
+            # aha, we found an upper bound.
+            max_k = K
+            print('K of {} is connected'.format(K))
+            #K, pairwise_geodesic_x, paths = do_decreasing_search(K, pairwise_euclidean_x)
+            #return K, pairwise_geodesic_x, paths
+        else:
+            missing = np.sum(_isinf)
+            size = pairwise_geodesic_x.size
+            print('{} of {} ({:2f}%) not connected for K of {}'.format(missing, size, missing * 100 / size, K))
+            min_k = K + 1
+
+    return min_k, pairwise_geodesic_x, paths
 
 @njit(fastmath=True)
 def compute_x_leaves(X, K, pairwise_geodesic_x=None, paths=None):
@@ -191,5 +239,7 @@ def compute_paths(pairwise_euclidean, K):
             for jj in range(N):
                 if pairwise_geodesic[ii, jj] > pairwise_geodesic[ii, k] + pairwise_geodesic[k, jj]:
                     paths[ii][jj] = paths[ii][k][:- 1] + paths[k][jj]
-        pairwise_geodesic = np.minimum(pairwise_geodesic, np.repeat(pairwise_geodesic[:, k], N).reshape(N, N) + np.repeat(pairwise_geodesic[k, :], N).reshape(N, N).T)
+        pairwise_geodesic = np.minimum(pairwise_geodesic,
+                                       np.repeat(pairwise_geodesic[:, k], N).reshape(N, N) + np.repeat(
+                                           pairwise_geodesic[k, :], N).reshape(N, N).T)
     return paths, pairwise_geodesic

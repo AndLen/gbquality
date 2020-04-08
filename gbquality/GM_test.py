@@ -6,7 +6,7 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import Isomap
 
 from gbquality.GM import compute_x_leaves, global_judge_x_precomputed, brute_compute_minimum_K, euclidean_distance, \
-    compute_paths
+    compute_paths, binary_search_minimum_K
 
 
 def generate_data():
@@ -29,7 +29,11 @@ class TestGM(unittest.TestCase):
         print(X)
 
         K, pairwise_X, PP = brute_compute_minimum_K(X)
-        print('Using a K of {}'.format(K))
+        print('Brute search gives K of {}'.format(K))
+        _K, pairwise_X, PP = binary_search_minimum_K(X,max_k=600)
+        print('Binary search gives K of {}'.format(_K))
+        self.assertEqual(K,_K)
+
         leaf_indices, leaf_dists, centre_index = compute_x_leaves(X, K, pairwise_X, PP)
 
         y_isomap = Isomap(n_neighbors=6).fit_transform(deepcopy(X.T)).T
@@ -38,7 +42,8 @@ class TestGM(unittest.TestCase):
         g_pca = global_judge_x_precomputed(leaf_indices, leaf_dists, centre_index, y_pca)
         print('Isomap:' + str(g_isomap))
         print('PCA:' + str(g_pca))
-        self.assertLess(g_pca, g_isomap)
+        self.assertTrue(np.isfinite(g_pca))
+        self.assertTrue(np.isfinite(g_isomap))
 
     def test_scurve(self):
         X = generate_data()
