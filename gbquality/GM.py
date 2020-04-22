@@ -5,6 +5,8 @@ from numba import njit
 from numba.typed import List
 from scipy.stats import spearmanr
 
+import gbquality.GM_networkx as gmnx
+
 
 def global_judge(X, Y, k):
     """
@@ -101,42 +103,58 @@ def do_decreasing_search(max_K, pairwise_euclidean_x):
             K -= 1
         else:
             # the one just before was best, since this is the first one which failed.
-            print('K of {} is mimimal.'.format(K+1))
+            print('K of {} is mimimal.'.format(K + 1))
             return K + 1, pairwise_geodesic_x, paths
 
-    #eek!
+    # eek!
     return compute_paths(pairwise_euclidean_x, max_K)
 
 
-def binary_search_minimum_K(X, min_k=1, max_k=None):
+def binary_search_minimum_K(X, min_k=1, max_k=None, use_networkx=True):
     pairwise_euclidean_x = euclidean_distance(X.T)
 
     if not max_k:
         max_k = int(np.ceil(np.sqrt(pairwise_euclidean_x.shape[0])))
 
-    paths, pairwise_geodesic_x = None, None
-    if min_k == max_k:
-        paths, pairwise_geodesic_x = compute_paths(pairwise_euclidean_x, min_k)
-
     while min_k < max_k:
-        #bias the search towards smaller?
+        # bias the search towards smaller?
         K = (min_k + max_k) // 2
         print('Trying K of {}'.format(K))
-        paths, pairwise_geodesic_x = compute_paths(pairwise_euclidean_x, K)
-        _isinf = np.isinf(pairwise_geodesic_x)
-        if not _isinf.any():
+        if use_networkx:
+            G, paths, pairwise_geodesic_x = gmnx.compute_paths_networkx(pairwise_euclidean_x, K)
+        else:
+            paths, pairwise_geodesic_x = compute_paths(pairwise_euclidean_x, K)
+        # this test doesn't work for gmnx
+        if use_networkx:
+            # this is a bit backwards, but is apparently the efficient way to do it:
+            # https://stackoverflow.com/questions/42916330/efficiently-count-zero-elements-in-numpy-array
+
+            # how many zeros *not* on the diagonal? (networkx uses zero to indicate NO edge).
+            num_invalids = np.count_nonzero(pairwise_geodesic_x == 0) - pairwise_geodesic_x.shape[0]
+        else:
+            # original code used INF to indicate NO edge.
+            num_invalids = np.isinf(pairwise_geodesic_x).sum()
+        if num_invalids == 0:
             # aha, we found an upper bound.
             max_k = K
             print('K of {} is connected'.format(K))
-            #K, pairwise_geodesic_x, paths = do_decreasing_search(K, pairwise_euclidean_x)
-            #return K, pairwise_geodesic_x, paths
+            # K, pairwise_geodesic_x, paths = do_decreasing_search(K, pairwise_euclidean_x)
+            # return K, pairwise_geodesic_x, paths
         else:
-            missing = np.sum(_isinf)
             size = pairwise_geodesic_x.size
-            print('{} of {} ({:2f}%) not connected for K of {}'.format(missing, size, missing * 100 / size, K))
+            print(
+                '{} of {} ({:2f}%) not connected for K of {}'.format(num_invalids, size, num_invalids * 100 / size, K))
             min_k = K + 1
 
-    return min_k, pairwise_geodesic_x, paths
+        # Have to recompute for the case where our min_k ended up being above our K --- i.e. don't want to
+        # return solution for k=2 when min_k=3. Could probably find a better way to do this by caching results.
+    if use_networkx:
+        G, paths, pairwise_geodesic_x = gmnx.compute_paths_networkx(pairwise_euclidean_x, min_k)
+        return min_k, pairwise_geodesic_x, paths, G
+    else:
+        paths, pairwise_geodesic_x = compute_paths(pairwise_euclidean_x, min_k)
+        return min_k, pairwise_geodesic_x, paths
+
 
 @njit(fastmath=True)
 def compute_x_leaves(X, K, pairwise_geodesic_x=None, paths=None):
@@ -210,21 +228,7 @@ def compute_leaves_fast(paths, pairwise_geodesic):
 @njit(fastmath=True)
 def compute_paths(pairwise_euclidean, K):
     N = pairwise_euclidean.shape[0]
-    # INF = 1000 * np.amax(pairwise_x) * N  # effectively infinite distance
-    # ind = np.argsort(pairwise_x, axis=1)[:, :K + 1]
-    ind = np.empty((N, K + 1), dtype=np.int_)
-    for i in range(N):
-        ind[i, :] = np.argsort(pairwise_euclidean[i])[:K + 1]
-    INF = 1000 * np.amax(pairwise_euclidean) * N  # effectively infinite distance
-    pairwise_geodesic = np.full((N, N), np.inf)
-    np.fill_diagonal(pairwise_geodesic, 0.)
-    # geodesic_dists = np.zeros((N, N))
-    for ii in range(N):
-        # I think this is right for nx?
-        for val in ind[ii]:
-            pairwise_geodesic[ii, val] = pairwise_euclidean[ii, val]
-        # geodesic_dists[ii, ind[ii]] = pairwise_x[ii, ind[ii]]
-    pairwise_geodesic = np.minimum(pairwise_geodesic, pairwise_geodesic.T)
+    pairwise_geodesic = get_weighted_adjacency_matrix(K, pairwise_euclidean, no_edge_val=np.inf)
     # CHECK
     # otherwise it uses the same list for each row...
     paths = List()
@@ -243,3 +247,19 @@ def compute_paths(pairwise_euclidean, K):
                                        np.repeat(pairwise_geodesic[:, k], N).reshape(N, N) + np.repeat(
                                            pairwise_geodesic[k, :], N).reshape(N, N).T)
     return paths, pairwise_geodesic
+
+
+@njit(fastmath=True)
+def get_weighted_adjacency_matrix(K, pairwise_euclidean, no_edge_val=0.):
+    N = pairwise_euclidean.shape[0]
+    ind = np.empty((N, K + 1), dtype=np.int_)
+    for i in range(N):
+        ind[i, :] = np.argsort(pairwise_euclidean[i])[:K + 1]
+    pairwise_geodesic = np.full((N, N), no_edge_val)
+    np.fill_diagonal(pairwise_geodesic, 0.)
+    for ii in range(N):
+        # I think this is right for nx?
+        for val in ind[ii]:
+            pairwise_geodesic[ii, val] = pairwise_euclidean[ii, val]
+    pairwise_geodesic = np.minimum(pairwise_geodesic, pairwise_geodesic.T)
+    return pairwise_geodesic

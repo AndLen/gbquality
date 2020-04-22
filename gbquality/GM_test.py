@@ -8,6 +8,8 @@ from sklearn.manifold import Isomap
 from gbquality.GM import compute_x_leaves, global_judge_x_precomputed, brute_compute_minimum_K, euclidean_distance, \
     compute_paths, binary_search_minimum_K
 
+from gbquality.GM_networkx import  compute_paths_networkx, compute_leaves_networkx
+
 
 def generate_data():
     # GENERATE SAMPLED DATA
@@ -30,7 +32,7 @@ class TestGM(unittest.TestCase):
 
         K, pairwise_X, PP = brute_compute_minimum_K(X)
         print('Brute search gives K of {}'.format(K))
-        _K, pairwise_X, PP = binary_search_minimum_K(X,max_k=600)
+        _K, pairwise_X, PP = binary_search_minimum_K(X,max_k=600,use_networkx=False)
         print('Binary search gives K of {}'.format(_K))
         self.assertEqual(K,_K)
 
@@ -470,7 +472,6 @@ class TestGM(unittest.TestCase):
         pairwise_x = euclidean_distance(X.T)
         PP, new_pairwise_x = compute_paths(pairwise_x, 6)
         leaf_indices, leaf_dists, centre_index = compute_x_leaves(X, 6,new_pairwise_x,PP)
-
         G_isomap = global_judge_x_precomputed(leaf_indices, leaf_dists, centre_index, Y_isomap)
         G_pca = global_judge_x_precomputed(leaf_indices, leaf_dists, centre_index, Y_pca)
         print('Isomap:' + str(G_isomap))
